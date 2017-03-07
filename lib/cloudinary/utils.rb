@@ -23,16 +23,22 @@ class Cloudinary::Utils
     "*" => 'mul',
     "/" => 'div',
     "+" => 'add',
-    "-" => 'min'
+    "-" => 'sub'
   }
 
-  CONDITIONAL_PARAMETERS = {
-    "width" => "w",
-    "height" => "h",
-    "aspect_ratio" => "ar",
-    "page_count" => "pc",
-    "face_count" => "fc",
-    "current_page" => "cp"
+  PREDEFINED_VARS = {
+    "aspect_ratio"         => "ar",
+    "current_page"         => "cp",
+    "face_count"           => "fc",
+    "height"               => "h",
+    "initial_aspect_ratio" => "iar",
+    "initial_height"       => "ih",
+    "initial_width"        => "iw",
+    "page_count"           => "pc",
+    "page_x"               => "px",
+    "page_y"               => "py",
+    "tags"                 => "tags",
+    "width"                => "w"
   }
   # Warning: options are being destructively updated!
   def self.generate_transformation_string(options={}, allow_implicit_crop_mode = false)
@@ -101,26 +107,26 @@ class Cloudinary::Utils
     ifValue = process_if(options.delete(:if))
 
     params = {
-      :a   => parse_expression(angle),
-      :ar => parse_expression(options.delete(:aspect_ratio)),
+      :a   => normalize_expression(angle),
+      :ar => normalize_expression(options.delete(:aspect_ratio)),
       :b   => background,
       :bo  => border,
       :c   => crop,
       :co  => color,
-      :dpr => parse_expression(dpr),
-      :e   => effect,
+      :dpr => normalize_expression(dpr),
+      :e   => normalize_expression(effect),
       :fl  => flags,
-      :h   => parse_expression(height),
+      :h   => normalize_expression(height),
       :l  => overlay,
-      :opacity => parse_expression(options.delete(:opacity)),
-      :q => parse_expression(options.delete(:quality)),
-      :r => parse_expression(options.delete(:radius)),
+      :o => normalize_expression(options.delete(:opacity)),
+      :q => normalize_expression(options.delete(:quality)),
+      :r => normalize_expression(options.delete(:radius)),
       :t   => named_transformation,
       :u  => underlay,
-      :w   => parse_expression(width),
-      :x => parse_expression(options.delete(:x)),
-      :y => parse_expression(options.delete(:y)),
-      :z => parse_expression(options.delete(:zoom))
+      :w   => normalize_expression(width),
+      :x => normalize_expression(options.delete(:x)),
+      :y => normalize_expression(options.delete(:y)),
+      :z => normalize_expression(options.delete(:zoom))
     }
     {
       :ac => :audio_codec,
@@ -155,13 +161,13 @@ class Cloudinary::Utils
     var_params = []
     options.each_pair do |key, value|
       if key =~ /^\$/
-        var_params.push "#{key}_#{parse_expression(value.to_s)}"
+        var_params.push "#{key}_#{normalize_expression(value.to_s)}"
       end
     end
     var_params.sort!
     unless variables.nil? || variables.empty?
       for name, value in variables
-        var_params.push "#{name}_#{parse_expression(value.to_s)}"
+        var_params.push "#{name}_#{normalize_expression(value.to_s)}"
       end
     end
     variables = var_params.join(',')
@@ -193,21 +199,20 @@ class Cloudinary::Utils
   # @private
   def self.process_if(ifValue)
     if ifValue
-      ifValue = parse_expression(ifValue)
+      ifValue = normalize_expression(ifValue)
 
       ifValue = "if_" + ifValue
     end
   end
 
-  def self.parse_expression(expression)
+  def self.normalize_expression(expression)
     if expression =~ /^!.+!$/ # quoted string
       expression
     else
       expression.to_s.gsub(
-        /(#{CONDITIONAL_PARAMETERS.keys.join("|")}|[=<>&|!*+\-\/]+)/,
-        CONDITIONAL_PARAMETERS.merge(CONDITIONAL_OPERATORS))
-        .gsub(/[ _]+/, "_")
-
+        Regexp.union(*PREDEFINED_VARS.keys, *CONDITIONAL_OPERATORS.keys.reverse),
+        PREDEFINED_VARS.merge(CONDITIONAL_OPERATORS)
+      ).gsub(/[ _]+/, "_")
     end
   end
 
@@ -252,9 +257,9 @@ class Cloudinary::Utils
            # Don't encode interpolation expressions e.g. $(variable)
            while(/\$\([a-zA-Z]\w+\)/.match text) do
              match = Regexp.last_match
-               result += smart_escape smart_escape(match.pre_match, %r"([,/])") # append encoded pre-match
-               result += match.to_s # append match
-               text = match.post_match
+             result += smart_escape smart_escape(match.pre_match, %r"([,/])") # append encoded pre-match
+             result += match.to_s # append match
+             text = match.post_match
            end
            text = result + smart_escape( smart_escape(text, %r"([,/])"))
          end
